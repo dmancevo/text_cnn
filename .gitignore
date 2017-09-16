@@ -2,3 +2,6 @@
 *.csv
 *.pkl
 *.txt
+*.model
+*.h5
+*.pkl
