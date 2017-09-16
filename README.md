@@ -11,6 +11,8 @@ Dependencies:
 Usage:
 
 ```python
+from text_cnn import Text_CNN
+
 X=['hello world','Μου αρέσουν οι ντολμάδες','الجو دافئ اليوم','池塘水很冷']
 y=[1,2,3,4]
 
