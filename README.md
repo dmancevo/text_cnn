@@ -14,7 +14,7 @@ Usage:
 from text_cnn import Text_CNN
 
 X=['hello world','Μου αρέσουν οι ντολμάδες','الجو دافئ اليوم','池塘水很冷']
-y=[1,2,3,4]
+y=[0,1,2,3]
 
 cnn = Text_CNN()
 cnn.fit(X,y)           # Train the model.
