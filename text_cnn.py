@@ -85,20 +85,29 @@ class Text_CNN:
 
 	def predict(self, X):
 		'''
-		Return per-class probability.
+		Return most likely class per sample.
 		'''
 		return np.argmax(self.cnn.predict(self._char2vec(X)),axis=1)
 
 	def predict_proba(self, X):
+		'''
+		Return per-class probability.
+		'''
 		return self.cnn.predict(self._char2vec(X))
 
 	def save(self, foldername='saved'):
+		'''
+		Save model into folder='foldername'
+		'''
 		from os import makedirs
 		makedirs(foldername)
 		self.cnn.save('{0}/txt_cnn.h5'.format(foldername))
 		self.char2vec.save('{0}/char2vec.model'.format(foldername))
 
 	def load(self, foldername='saved'):
+		'''
+		Load model from folder='foldername'
+		'''
 		from keras.models import load_model
 		self.char2vec = Word2Vec.load('{0}/char2vec.model'.format(foldername))
 		self.cnn      = load_model('{0}/txt_cnn.h5'.format(foldername))
