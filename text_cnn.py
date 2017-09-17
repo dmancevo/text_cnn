@@ -1,7 +1,12 @@
+from os import makedirs
 import numpy as np
 from gensim.models import Word2Vec
-from keras.models import Sequential
+from keras.engine import Input
+from keras.preprocessing.text import Tokenizer
+from keras.models import Model
 from keras.layers import Conv1D,MaxPooling1D,Flatten,Dense,Dropout
+from keras.models import load_model
+import pickle as pkl
 
 class Text_CNN:
 
@@ -42,15 +47,11 @@ class Text_CNN:
 		self.epochs      =epochs
 		self.batch_size  =batch_size
 
-	def _char2vec(self,docs):
-		S=np.zeros(shape=(len(docs),self.chars,self.dim))
-		for i in range(len(docs)):
-			for j in range(min(self.chars, len(docs[i]))):
-				try:
-					S[i,j,:] = self.char2vec.wv[docs[i][j]]
-				except KeyError:
-					continue
-		return S
+	def text_to_matrix(self,X):
+		mtrx = self.T.texts_to_matrix(X)[:,:self.chars]
+		pad  = np.zeros((mtrx.shape[0],self.chars))
+		pad[:mtrx.shape[0],:mtrx.shape[1]] = mtrx
+		return pad
 
 	def fit(self,X,y):
 		'''
@@ -58,56 +59,59 @@ class Text_CNN:
 		y: document labels for classification.
 		'''
 
-		self.char2vec = Word2Vec(size=self.dim, window=self.char_window, min_count=1, workers=4)
+		char2vec = Word2Vec(size=self.dim, window=self.char_window, min_count=1, workers=4)
 
-		self.char2vec.build_vocab(X)
-		self.char2vec.train(X,total_examples=self.char2vec.corpus_count,epochs=self.emb_epochs)
+		char2vec.build_vocab(X)
+		char2vec.train(X,total_examples=char2vec.corpus_count,epochs=self.emb_epochs)
+
+		self.T = Tokenizer(filters='',lower=False,split='',char_level=True)
+		self.T.fit_on_texts(char2vec.wv.index2word)
+
+		inpt = Input(shape=(self.chars,), dtype='int32')
+		x    = char2vec.wv.get_embedding_layer()(inpt)
 
 		f = 2
-		self.cnn = Sequential([
-			Conv1D(
-				filters=f,
-				kernel_size=self.window, padding='same', input_shape=(self.chars,self.dim)),
-			MaxPooling1D(),
-		])
-
-		for c in range(2,self.depth+1):
+		for c in range(self.depth):
+			
+			x = Conv1D(filters=f, kernel_size=self.window, padding='same')(x)
+			x = MaxPooling1D(pool_size=self.pool_size)(x)
 			f *= 2
-			self.cnn.add(Conv1D(filters=f, kernel_size=self.window, padding='same'))
-			self.cnn.add(MaxPooling1D(pool_size=self.pool_size))
 
-		self.cnn.add(Flatten())
-		self.cnn.add(Dense(self.hidden,activation='relu'))
-		self.cnn.add(Dropout(self.drp_rate))
-		self.cnn.add(Dense(2,activation='softmax'))
+		x    = Flatten()(x)
+		x    = Dense(self.hidden,activation='relu')(x)
+		x    = Dropout(self.drp_rate)(x)
+		prob = Dense(len(np.unique(y)),activation='softmax')(x)
+
+		self.cnn = Model(inputs=inpt, outputs=prob)
 		self.cnn.compile(loss='sparse_categorical_crossentropy',optimizer='adam')
-		self.cnn.fit(self._char2vec(X), y, epochs=self.epochs, batch_size=self.batch_size)
+		self.cnn.fit(self.text_to_matrix(X), y, epochs=self.epochs, batch_size=self.batch_size)
 
 	def predict(self, X):
 		'''
 		Return most likely class per sample.
 		'''
-		return np.argmax(self.cnn.predict(self._char2vec(X)),axis=1)
+		return np.argmax(self.cnn.predict(self.text_to_matrix(X)),axis=1)
 
 	def predict_proba(self, X):
 		'''
 		Return per-class probability.
 		'''
-		return self.cnn.predict(self._char2vec(X))
+		return self.cnn.predict(self.text_to_matrix(X))
 
 	def save(self, foldername='saved'):
 		'''
 		Save model into folder='foldername'
 		'''
-		from os import makedirs
 		makedirs(foldername)
 		self.cnn.save('{0}/txt_cnn.h5'.format(foldername))
-		self.char2vec.save('{0}/char2vec.model'.format(foldername))
+		with open('{0}/tokenizer.pkl'.format(foldername), 'wb') as f:
+			pkl.dump(self.T,f)
 
 	def load(self, foldername='saved'):
 		'''
 		Load model from folder='foldername'
 		'''
-		from keras.models import load_model
-		self.char2vec = Word2Vec.load('{0}/char2vec.model'.format(foldername))
-		self.cnn      = load_model('{0}/txt_cnn.h5'.format(foldername))
+		self.cnn   = load_model('{0}/txt_cnn.h5'.format(foldername))
+		with open('{0}/tokenizer.pkl'.format(foldername), 'rb') as f:
+			self.T = pkl.load(f)
+
